@@ -3,196 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Arena Survivor - 1st Person</title>
+    <title>Arena Survivor Pro</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
         canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
-        
-        #hud {
-            position: absolute; bottom: 30px; left: 30px;
-            color: #ff4444; text-shadow: 2px 2px #000;
-            font-weight: bold; font-size: 24px;
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: #0f0; 
+            background: rgba(0,0,0,0.7); padding: 15px; border: 2px solid #0f0;
         }
-
         #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            width: 20px; height: 20px;
-            border: 2px solid rgba(255,255,255,0.5);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        }
-
-        .controls-info {
-            position: absolute; top: 20px; right: 20px;
-            color: rgba(255,255,255,0.7); font-size: 14px;
-            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #0f0; font-size: 20px; pointer-events: none;
         }
     </style>
 </head>
 <body>
 
-    <div id="crosshair"></div>
-    <div id="hud">HP: 100 | AMMO: 30</div>
-    <div class="controls-info"><b>W / S</b>: Frem / Tilbake<br><b>A / D</b>: Drei kamera</div>
+    <div id="ui">
+        <div>MODUS: <span id="view-mode">1ST PERSON</span></div>
+        <div>VÅPEN: <span id="weapon-status">INGEN (Finn 'Pistol' med T)</span></div>
+        <div>HP: <span id="hp">100</span> | FIENDER: <span id="enemies-count">0</span></div>
+        <div style="font-size: 10px; margin-top: 10px; color: #888;">
+            W/S: Beveg | A/D: Snu | I: Skyte | T: Plukk opp | B: Toggle 3rd Person
+        </div>
+    </div>
+    <div id="crosshair">+</div>
     <canvas id="game"></canvas>
 
 <script>
+/**
+ * ENGINE CONFIG
+ */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+canvas.width = 640; canvas.height = 360;
 
-// Render-oppløsning (lavere = mer retro og raskere)
-canvas.width = 640;
-canvas.height = 360;
-
-// ARENA MAP (1-4 er forskjellige veggfarger, 0 er åpent)
-const mapSize = 12;
-const map = [
-    1,1,1,1,1,1,1,1,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,2,0,0,3,3,0,0,4,0,1,
-    1,0,2,0,0,0,0,0,0,4,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,1,1,1,1,0,0,0,1,
-    1,0,0,0,1,0,0,1,0,0,0,1,
-    1,0,3,0,0,0,0,0,0,2,0,1,
-    1,0,3,0,0,0,0,0,0,2,0,1,
-    1,0,0,0,0,4,4,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,1,1,1,1,1,1,1,1
+// MAP: 24x24 Stor Arena
+const mapSize = 24;
+const world = [
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,2,2,0,0,0,0,0,2,2,0,0,0,2,2,0,0,0,0,2,2,0,1,
+    1,0,2,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,0,2,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,3,3,3,0,0,0,0,0,1,0,0,0,0,3,3,3,0,0,0,1,
+    1,0,0,0,3,0,0,0,0,0,0,0,1,0,0,0,0,0,0,3,0,0,0,1,
+    1,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,
+    1,0,0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,1,
+    1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1,1,1,
+    1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1,1,1,
+    1,0,0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,1,
+    1,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,
+    1,0,0,0,3,0,0,0,0,0,0,0,1,0,0,0,0,0,0,3,0,0,0,1,
+    1,0,0,0,3,3,3,0,0,0,0,0,1,0,0,0,0,3,3,3,0,0,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,2,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,0,2,0,1,
+    1,0,2,2,0,0,0,0,0,2,2,0,0,0,2,2,0,0,0,0,2,2,0,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 ];
 
-// Spiller-posisjon og retning
-let posX = 2, posY = 2;
-let dirX = -1, dirY = 0;
-let planeX = 0, planeY = 0.66; // Kamera-vidvinkel
+// Spilleren
+let player = {
+    x: 12, y: 12, dirX: -1, dirY: 0, planeX: 0, planeY: 0.66,
+    hp: 100, hasWeapon: false, is3rdPerson: false, shootTimer: 0
+};
+
+// Objekter (Våpen og Fiender)
+let sprites = [
+    { x: 10, y: 10, type: 'weapon', active: true },
+    { x: 5, y: 5, type: 'enemy', active: true, hp: 3 },
+    { x: 18, y: 18, type: 'enemy', active: true, hp: 3 },
+    { x: 5, y: 18, type: 'enemy', active: true, hp: 3 }
+];
 
 const keys = {};
-document.onkeydown = (e) => keys[e.code] = true;
-document.onkeyup = (e) => keys[e.code] = false;
+window.onkeydown = e => keys[e.code] = true;
+window.onkeyup = e => keys[e.code] = false;
 
+/**
+ * LOGIKK
+ */
 function update() {
-    const moveSpeed = 0.06;
-    const rotSpeed = 0.04;
+    const moveSpeed = 0.08;
+    const rotSpeed = 0.05;
 
-    // Frem og tilbake (W / S)
-    if (keys['KeyW']) {
-        if (map[Math.floor(posX + dirX * moveSpeed) + Math.floor(posY) * mapSize] == 0) posX += dirX * moveSpeed;
-        if (map[Math.floor(posX) + Math.floor(posY + dirY * moveSpeed) * mapSize] == 0) posY += dirY * moveSpeed;
-    }
-    if (keys['KeyS']) {
-        if (map[Math.floor(posX - dirX * moveSpeed) + Math.floor(posY) * mapSize] == 0) posX -= dirX * moveSpeed;
-        if (map[Math.floor(posX) + Math.floor(posY - dirY * moveSpeed) * mapSize] == 0) posY -= dirY * moveSpeed;
+    // Toggle 3rd Person (B)
+    if (keys['KeyB']) {
+        player.is3rdPerson = !player.is3rdPerson;
+        document.getElementById('view-mode').innerText = player.is3rdPerson ? "3RD PERSON" : "1ST PERSON";
+        keys['KeyB'] = false; // Hindre spam
     }
 
-    // Rotere kamera (A / D)
-    if (keys['KeyD']) {
-        let oldDirX = dirX;
-        dirX = dirX * Math.cos(-rotSpeed) - dirY * Math.sin(-rotSpeed);
-        dirY = oldDirX * Math.sin(-rotSpeed) + dirY * Math.cos(-rotSpeed);
-        let oldPlaneX = planeX;
-        planeX = planeX * Math.cos(-rotSpeed) - planeY * Math.sin(-rotSpeed);
-        planeY = oldPlaneX * Math.sin(-rotSpeed) + planeY * Math.cos(-rotSpeed);
+    // Bevegelse W/S og Rotasjon A/D
+    if (keys['KeyW']) move(moveSpeed);
+    if (keys['KeyS']) move(-moveSpeed);
+    if (keys['KeyD']) rotate(-rotSpeed);
+    if (keys['KeyA']) rotate(rotSpeed);
+
+    // Plukk opp (T)
+    if (keys['KeyT']) {
+        sprites.forEach(s => {
+            if (s.type === 'weapon' && dist(player.x, player.y, s.x, s.y) < 1) {
+                s.active = false;
+                player.hasWeapon = true;
+                document.getElementById('weapon-status').innerText = "PISTOL (KLAR)";
+            }
+        });
     }
-    if (keys['KeyA']) {
-        let oldDirX = dirX;
-        dirX = dirX * Math.cos(rotSpeed) - dirY * Math.sin(rotSpeed);
-        dirY = oldDirX * Math.sin(rotSpeed) + dirY * Math.cos(rotSpeed);
-        let oldPlaneX = planeX;
-        planeX = planeX * Math.cos(rotSpeed) - planeY * Math.sin(rotSpeed);
-        planeY = oldPlaneX * Math.sin(rotSpeed) + planeY * Math.cos(rotSpeed);
+
+    // Skyt (I)
+    if (keys['KeyI'] && player.hasWeapon && player.shootTimer <= 0) {
+        player.shootTimer = 20;
+        checkHit();
     }
+    if (player.shootTimer > 0) player.shootTimer--;
+
+    // Fiende AI (Finders)
+    sprites.forEach(s => {
+        if (s.type === 'enemy' && s.active) {
+            let dx = player.x - s.x;
+            let dy = player.y - s.y;
+            let d = Math.sqrt(dx*dx + dy*dy);
+            if (d < 10 && d > 0.5) {
+                s.x += (dx/d) * 0.03;
+                s.y += (dy/d) * 0.03;
+            }
+            if (d < 0.6) player.hp -= 0.2;
+        }
+    });
+
+    document.getElementById('hp').innerText = Math.ceil(player.hp);
+    document.getElementById('enemies-count').innerText = sprites.filter(s => s.type === 'enemy' && s.active).length;
 }
 
-function draw() {
-    // Bakgrunn (Tak og Gulv)
-    ctx.fillStyle = "#111"; // Tak
-    ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
-    ctx.fillStyle = "#222"; // Gulv
-    ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+function move(speed) {
+    if (world[Math.floor(player.x + player.dirX * speed) + Math.floor(player.y) * mapSize] === 0) player.x += player.dirX * speed;
+    if (world[Math.floor(player.x) + Math.floor(player.y + player.dirY * speed) * mapSize] === 0) player.y += player.dirY * speed;
+}
 
-    // Raycasting motor
+function rotate(speed) {
+    let oldDirX = player.dirX;
+    player.dirX = player.dirX * Math.cos(speed) - player.dirY * Math.sin(speed);
+    player.dirY = oldDirX * Math.sin(speed) + player.dirY * Math.cos(speed);
+    let oldPlaneX = player.planeX;
+    player.planeX = player.planeX * Math.cos(speed) - player.planeY * Math.sin(speed);
+    player.planeY = oldPlaneX * Math.sin(speed) + player.planeY * Math.cos(speed);
+}
+
+function dist(x1, y1, x2, y2) { return Math.sqrt((x2-x1)**2 + (y2-y1)**2); }
+
+function checkHit() {
+    sprites.forEach(s => {
+        if (s.type === 'enemy' && s.active) {
+            // Enkel sjekk om fienden er i sikte (vinkel og avstand)
+            let dx = s.x - player.x;
+            let dy = s.y - player.y;
+            let angle = Math.atan2(dy, dx);
+            let playerAngle = Math.atan2(player.dirY, player.dirX);
+            let diff = Math.abs(angle - playerAngle);
+            if (diff < 0.2 && dist(player.x, player.y, s.x, s.y) < 8) {
+                s.hp--;
+                if (s.hp <= 0) s.active = false;
+            }
+        }
+    });
+}
+
+/**
+ * RENDERING (RAYCASTING)
+ */
+function draw() {
+    // Bakgrunn
+    ctx.fillStyle = "#111"; ctx.fillRect(0,0,canvas.width, canvas.height/2); // Tak
+    ctx.fillStyle = "#333"; ctx.fillRect(0,canvas.height/2,canvas.width, canvas.height/2); // Gulv
+
+    // Raycast variabler
+    let camX = player.x, camY = player.y;
+    if (player.is3rdPerson) {
+        // Flytt kameraet 2 enheter bak spilleren
+        camX = player.x - player.dirX * 1.5;
+        camY = player.y - player.dirY * 1.5;
+    }
+
+    const zBuffer = [];
+
+    // Tegn vegger
     for (let x = 0; x < canvas.width; x++) {
         let cameraX = 2 * x / canvas.width - 1;
-        let rayDirX = dirX + planeX * cameraX;
-        let rayDirY = dirY + planeY * cameraX;
+        let rayDirX = player.dirX + player.planeX * cameraX;
+        let rayDirY = player.dirY + player.planeY * cameraX;
 
-        let mapX = Math.floor(posX);
-        let mapY = Math.floor(posY);
+        let mapX = Math.floor(camX);
+        let mapY = Math.floor(camY);
 
-        let deltaDistX = Math.abs(1 / rayDirX);
-        let deltaDistY = Math.abs(1 / rayDirY);
-        
-        let stepX, stepY, sideDistX, sideDistY;
-        let hit = 0, side = 0, wallType = 0;
+        let deltaX = Math.abs(1 / rayDirX);
+        let deltaY = Math.abs(1 / rayDirY);
+        let stepX, stepY, sideX, sideY, hit=0, side;
 
-        if (rayDirX < 0) { stepX = -1; sideDistX = (posX - mapX) * deltaDistX; }
-        else { stepX = 1; sideDistX = (mapX + 1.0 - posX) * deltaDistX; }
-        
-        if (rayDirY < 0) { stepY = -1; sideDistY = (posY - mapY) * deltaDistY; }
-        else { stepY = 1; sideDistY = (mapY + 1.0 - posY) * deltaDistY; }
+        if (rayDirX < 0) { stepX = -1; sideX = (camX - mapX) * deltaX; }
+        else { stepX = 1; sideX = (mapX + 1.0 - camX) * deltaX; }
+        if (rayDirY < 0) { stepY = -1; sideY = (camY - mapY) * deltaY; }
+        else { stepY = 1; sideY = (mapY + 1.0 - camY) * deltaY; }
 
-        while (hit == 0) {
-            if (sideDistX < sideDistY) {
-                sideDistX += deltaDistX;
-                mapX += stepX;
-                side = 0;
-            } else {
-                sideDistY += deltaDistY;
-                mapY += stepY;
-                side = 1;
-            }
-            if (map[mapX + mapY * mapSize] > 0) {
-                hit = 1;
-                wallType = map[mapX + mapY * mapSize];
-            }
+        while(hit == 0) {
+            if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
+            else { sideY += deltaY; mapY += stepY; side = 1; }
+            if (world[mapX + mapY * mapSize] > 0) hit = 1;
         }
 
-        let perpWallDist = (side == 0) ? (sideDistX - deltaDistX) : (sideDistY - deltaDistY);
-        let lineHeight = Math.floor(canvas.height / perpWallDist);
+        let perpDist = (side == 0) ? (sideX - deltaX) : (sideY - deltaY);
+        zBuffer[x] = perpDist;
 
-        // Finn farge basert på veggtype i map-arrayen
-        let color;
-        switch(wallType) {
-            case 1: color = side == 0 ? '#555' : '#333'; break; // Grå
-            case 2: color = side == 0 ? '#a33' : '#722'; break; // Rød
-            case 3: color = side == 0 ? '#3a3' : '#272'; break; // Grønn
-            case 4: color = side == 0 ? '#33a' : '#227'; break; // Blå
-        }
-
+        let h = Math.floor(canvas.height / perpDist);
+        let start = -h/2 + canvas.height/2;
+        
+        let color = world[mapX + mapY * mapSize] == 1 ? "#555" : "#772";
+        if (side == 1) ctx.globalAlpha = 0.7; // Enkel skygge på sider
         ctx.fillStyle = color;
-        ctx.fillRect(x, -lineHeight / 2 + canvas.height / 2, 1, lineHeight);
+        ctx.fillRect(x, start, 1, h);
+        ctx.globalAlpha = 1.0;
     }
-    
-    drawWeapon();
+
+    // Tegn Sprites (Fiender og Våpen)
+    sprites.sort((a,b) => dist(player.x,player.y,b.x,b.y) - dist(player.x,player.y,a.x,a.y));
+    sprites.forEach(s => {
+        if (!s.active) return;
+        let sx = s.x - camX, sy = s.y - camY;
+        let invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
+        let transX = invDet * (player.dirY * sx - player.dirX * sy);
+        let transY = invDet * (-player.planeY * sx + player.planeX * sy);
+        
+        if (transY > 0.1) {
+            let screenX = Math.floor((canvas.width / 2) * (1 + transX / transY));
+            let sH = Math.abs(Math.floor(canvas.height / transY));
+            let sW = Math.abs(Math.floor(canvas.height / transY));
+
+            if (zBuffer[screenX] > transY) {
+                ctx.fillStyle = s.type === 'weapon' ? "#0af" : "#f00";
+                ctx.fillRect(screenX - sW/2, canvas.height/2 - sH/4, sW, sH/2);
+            }
+        }
+    });
+
+    // Tegn Spiller-modell (KUN i 3rd Person)
+    if (player.is3rdPerson) {
+        ctx.fillStyle = "#0f0";
+        ctx.fillRect(canvas.width/2 - 10, canvas.height/2 + 20, 20, 60);
+    } else {
+        // Våpen i 1. person
+        if (player.hasWeapon) {
+            ctx.fillStyle = "#222";
+            ctx.fillRect(canvas.width - 200, canvas.height - 150 + (player.shootTimer*2), 100, 200);
+        }
+    }
 }
 
-function drawWeapon() {
-    const time = Date.now() * 0.004;
-    const wobble = Math.sin(time) * 4;
-    const centerX = canvas.width / 2;
-    const bottomY = canvas.height;
 
-    ctx.save();
-    ctx.translate(centerX + 80, bottomY - 100 + wobble);
-    
-    // Tegner en futuristisk børse
-    ctx.fillStyle = "#111";
-    ctx.fillRect(0, 0, 50, 120); // Håndtak/Kropp
-    ctx.fillStyle = "#222";
-    ctx.fillRect(-10, -80, 40, 100); // Løpet
-    ctx.fillStyle = "#00ff00";
-    ctx.fillRect(-2, -70, 4, 40); // Lysende detalj
-    
-    ctx.restore();
-}
 
 function loop() {
     update();
     draw();
     requestAnimationFrame(loop);
 }
-
 loop();
 </script>
 </body>
