@@ -3,266 +3,271 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arena Survivor Pro</title>
+    <title>Arena Survivor: Dead End</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+        
         #ui {
-            position: absolute; top: 20px; left: 20px; color: #0f0; 
-            background: rgba(0,0,0,0.7); padding: 15px; border: 2px solid #0f0;
+            position: absolute; top: 20px; left: 20px; color: #fff; 
+            background: rgba(0,0,0,0.8); padding: 15px; border-left: 5px solid #e74c3c;
+            pointer-events: none;
         }
-        #crosshair {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: #0f0; font-size: 20px; pointer-events: none;
+
+        #death-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(139, 0, 0, 0.8); color: white;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 2000;
+        }
+
+        #death-screen h1 { font-size: 80px; margin: 0; text-shadow: 5px 5px #000; }
+        #death-screen button { 
+            padding: 15px 30px; font-size: 20px; background: white; border: none; 
+            cursor: pointer; margin-top: 20px; font-weight: bold;
         }
     </style>
 </head>
 <body>
 
     <div id="ui">
-        <div>MODUS: <span id="view-mode">1ST PERSON</span></div>
-        <div>VÅPEN: <span id="weapon-status">INGEN (Finn 'Pistol' med T)</span></div>
-        <div>HP: <span id="hp">100</span> | FIENDER: <span id="enemies-count">0</span></div>
-        <div style="font-size: 10px; margin-top: 10px; color: #888;">
-            W/S: Beveg | A/D: Snu | I: Skyte | T: Plukk opp | B: Toggle 3rd Person
+        <div style="font-size: 24px; font-weight: 900; color: #e74c3c;">HP: <span id="hp">100</span></div>
+        <div id="weapon-status" style="color: #3498db;">FINN VÅPEN (Blå bokser)</div>
+        <div style="font-size: 12px; margin-top: 5px; color: #aaa;">
+            PILER: Sikte opp/ned | W/S/A/D: Bevegelse<br>I: Skyte | T: Plukke opp | B: 3rd person
         </div>
     </div>
-    <div id="crosshair">+</div>
+
+    <div id="death-screen">
+        <h1>DU DØDE</h1>
+        <button onclick="location.reload()">PRØV IGJEN</button>
+    </div>
+
     <canvas id="game"></canvas>
 
 <script>
-/**
- * ENGINE CONFIG
- */
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 canvas.width = 640; canvas.height = 360;
 
-// MAP: 24x24 Stor Arena
 const mapSize = 24;
 const world = [
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,2,2,0,0,0,0,0,2,2,0,0,0,2,2,0,0,0,0,2,2,0,1,
-    1,0,2,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,0,2,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,0,3,3,3,0,0,0,0,0,1,0,0,0,0,3,3,3,0,0,0,1,
-    1,0,0,0,3,0,0,0,0,0,0,0,1,0,0,0,0,0,0,3,0,0,0,1,
-    1,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,
-    1,0,0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,1,
-    1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1,1,1,
-    1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,
+    1,0,2,2,0,0,3,3,0,0,0,0,1,0,0,0,0,0,0,0,2,2,0,1,
+    1,0,2,0,0,0,0,0,0,0,0,0,1,0,0,0,3,3,0,0,0,2,0,1,
+    1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,3,3,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,1,1,1,0,0,0,0,2,2,2,2,2,2,2,2,0,0,0,0,1,1,1,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1,1,1,
-    1,0,0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,0,0,0,1,
-    1,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,1,
-    1,0,0,0,3,0,0,0,0,0,0,0,1,0,0,0,0,0,0,3,0,0,0,1,
-    1,0,0,0,3,3,3,0,0,0,0,0,1,0,0,0,0,3,3,3,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,2,0,0,0,0,0,0,0,2,0,0,0,2,0,0,0,0,0,0,2,0,1,
-    1,0,2,2,0,0,0,0,0,2,2,0,0,0,2,2,0,0,0,0,2,2,0,1,
+    1,0,0,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,0,0,1,
+    1,0,0,3,3,0,0,0,0,1,1,0,0,1,1,0,0,0,0,3,3,0,0,1,
+    1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 ];
 
-// Spilleren
 let player = {
-    x: 12, y: 12, dirX: -1, dirY: 0, planeX: 0, planeY: 0.66,
-    hp: 100, hasWeapon: false, is3rdPerson: false, shootTimer: 0
+    x: 12, y: 10, dirX: -1, dirY: 0, planeX: 0, planeY: 0.66,
+    hp: 100, hasWeapon: false, is3rdPerson: false, 
+    pitch: 0, // Vertikal sikt
+    dead: false
 };
 
-// Objekter (Våpen og Fiender)
+// Sprites: Våpen (type 0) og Fiender (type 1)
 let sprites = [
-    { x: 10, y: 10, type: 'weapon', active: true },
-    { x: 5, y: 5, type: 'enemy', active: true, hp: 3 },
-    { x: 18, y: 18, type: 'enemy', active: true, hp: 3 },
-    { x: 5, y: 18, type: 'enemy', active: true, hp: 3 }
+    {x: 14, y: 10, type: 0, active: true},
+    {x: 5, y: 3, type: 0, active: true},
+    {x: 19, y: 5, type: 0, active: true},
+    {x: 2, y: 10, type: 0, active: true},
+    {x: 10, y: 5, type: 1, active: true, hp: 3},
+    {x: 15, y: 2, type: 1, active: true, hp: 3},
+    {x: 4, y: 4, type: 1, active: true, hp: 3}
 ];
 
 const keys = {};
 window.onkeydown = e => keys[e.code] = true;
 window.onkeyup = e => keys[e.code] = false;
 
-/**
- * LOGIKK
- */
 function update() {
-    const moveSpeed = 0.08;
-    const rotSpeed = 0.05;
+    if (player.dead) return;
 
-    // Toggle 3rd Person (B)
-    if (keys['KeyB']) {
-        player.is3rdPerson = !player.is3rdPerson;
-        document.getElementById('view-mode').innerText = player.is3rdPerson ? "3RD PERSON" : "1ST PERSON";
-        keys['KeyB'] = false; // Hindre spam
-    }
+    const moveSpeed = 0.07;
+    const rotSpeed = 0.04;
 
-    // Bevegelse W/S og Rotasjon A/D
     if (keys['KeyW']) move(moveSpeed);
     if (keys['KeyS']) move(-moveSpeed);
     if (keys['KeyD']) rotate(-rotSpeed);
     if (keys['KeyA']) rotate(rotSpeed);
+    if (keys['KeyB']) { player.is3rdPerson = !player.is3rdPerson; keys['KeyB'] = false; }
+
+    // Sikte opp/ned (Pitch)
+    if (keys['ArrowUp']) player.pitch = Math.min(player.pitch + 5, 100);
+    if (keys['ArrowDown']) player.pitch = Math.max(player.pitch - 5, -100);
 
     // Plukk opp (T)
     if (keys['KeyT']) {
         sprites.forEach(s => {
-            if (s.type === 'weapon' && dist(player.x, player.y, s.x, s.y) < 1) {
+            if (s.type === 0 && s.active && dist(player.x, player.y, s.x, s.y) < 1) {
                 s.active = false;
                 player.hasWeapon = true;
-                document.getElementById('weapon-status').innerText = "PISTOL (KLAR)";
+                document.getElementById('weapon-status').innerText = "VÅPEN KLAR: PISTOL";
+                document.getElementById('weapon-status').style.color = "#2ecc71";
             }
         });
     }
 
-    // Skyt (I)
-    if (keys['KeyI'] && player.hasWeapon && player.shootTimer <= 0) {
-        player.shootTimer = 20;
-        checkHit();
+    // Skyte (I)
+    if (keys['KeyI'] && player.hasWeapon) {
+        shoot();
     }
-    if (player.shootTimer > 0) player.shootTimer--;
 
-    // Fiende AI (Finders)
+    // Fiende AI og HP sjekk
     sprites.forEach(s => {
-        if (s.type === 'enemy' && s.active) {
-            let dx = player.x - s.x;
-            let dy = player.y - s.y;
-            let d = Math.sqrt(dx*dx + dy*dy);
-            if (d < 10 && d > 0.5) {
-                s.x += (dx/d) * 0.03;
-                s.y += (dy/d) * 0.03;
+        if (s.type === 1 && s.active) {
+            let d = dist(player.x, player.y, s.x, s.y);
+            if (d < 8) {
+                s.x += (player.x - s.x) * 0.005;
+                s.y += (player.y - s.y) * 0.005;
             }
-            if (d < 0.6) player.hp -= 0.2;
+            if (d < 0.5) player.hp -= 0.5;
         }
     });
 
+    if (player.hp <= 0) {
+        player.hp = 0;
+        player.dead = true;
+        document.getElementById('death-screen').style.display = 'flex';
+    }
+
     document.getElementById('hp').innerText = Math.ceil(player.hp);
-    document.getElementById('enemies-count').innerText = sprites.filter(s => s.type === 'enemy' && s.active).length;
 }
 
-function move(speed) {
-    if (world[Math.floor(player.x + player.dirX * speed) + Math.floor(player.y) * mapSize] === 0) player.x += player.dirX * speed;
-    if (world[Math.floor(player.x) + Math.floor(player.y + player.dirY * speed) * mapSize] === 0) player.y += player.dirY * speed;
+function move(s) {
+    if (world[Math.floor(player.x + player.dirX * s) + Math.floor(player.y) * mapSize] === 0) player.x += player.dirX * s;
+    if (world[Math.floor(player.x) + Math.floor(player.y + player.dirY * s) * mapSize] === 0) player.y += player.dirY * s;
 }
 
-function rotate(speed) {
-    let oldDirX = player.dirX;
-    player.dirX = player.dirX * Math.cos(speed) - player.dirY * Math.sin(speed);
-    player.dirY = oldDirX * Math.sin(speed) + player.dirY * Math.cos(speed);
-    let oldPlaneX = player.planeX;
-    player.planeX = player.planeX * Math.cos(speed) - player.planeY * Math.sin(speed);
-    player.planeY = oldPlaneX * Math.sin(speed) + player.planeY * Math.cos(speed);
+function rotate(s) {
+    let oldX = player.dirX;
+    player.dirX = player.dirX * Math.cos(s) - player.dirY * Math.sin(s);
+    player.dirY = oldX * Math.sin(s) + player.dirY * Math.cos(s);
+    let oldPX = player.planeX;
+    player.planeX = player.planeX * Math.cos(s) - player.planeY * Math.sin(s);
+    player.planeY = oldPX * Math.sin(s) + player.planeY * Math.cos(s);
 }
 
 function dist(x1, y1, x2, y2) { return Math.sqrt((x2-x1)**2 + (y2-y1)**2); }
 
-function checkHit() {
+function shoot() {
     sprites.forEach(s => {
-        if (s.type === 'enemy' && s.active) {
-            // Enkel sjekk om fienden er i sikte (vinkel og avstand)
-            let dx = s.x - player.x;
-            let dy = s.y - player.y;
+        if (s.type === 1 && s.active) {
+            let dx = s.x - player.x, dy = s.y - player.y;
             let angle = Math.atan2(dy, dx);
-            let playerAngle = Math.atan2(player.dirY, player.dirX);
-            let diff = Math.abs(angle - playerAngle);
-            if (diff < 0.2 && dist(player.x, player.y, s.x, s.y) < 8) {
-                s.hp--;
-                if (s.hp <= 0) s.active = false;
+            let pAngle = Math.atan2(player.dirY, player.dirX);
+            if (Math.abs(angle - pAngle) < 0.2 && dist(player.x, player.y, s.x, s.y) < 10) {
+                s.hp--; if (s.hp <= 0) s.active = false;
             }
         }
     });
 }
 
-/**
- * RENDERING (RAYCASTING)
- */
 function draw() {
     // Bakgrunn
-    ctx.fillStyle = "#111"; ctx.fillRect(0,0,canvas.width, canvas.height/2); // Tak
-    ctx.fillStyle = "#333"; ctx.fillRect(0,canvas.height/2,canvas.width, canvas.height/2); // Gulv
-
-    // Raycast variabler
+    ctx.fillStyle = "#1a1a1a"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     let camX = player.x, camY = player.y;
     if (player.is3rdPerson) {
-        // Flytt kameraet 2 enheter bak spilleren
-        camX = player.x - player.dirX * 1.5;
-        camY = player.y - player.dirY * 1.5;
+        camX -= player.dirX * 1.5; camY -= player.dirY * 1.5;
     }
 
     const zBuffer = [];
 
-    // Tegn vegger
+    // Vegger
     for (let x = 0; x < canvas.width; x++) {
         let cameraX = 2 * x / canvas.width - 1;
-        let rayDirX = player.dirX + player.planeX * cameraX;
-        let rayDirY = player.dirY + player.planeY * cameraX;
+        let rDirX = player.dirX + player.planeX * cameraX;
+        let rDirY = player.dirY + player.planeY * cameraX;
 
-        let mapX = Math.floor(camX);
-        let mapY = Math.floor(camY);
+        let mX = Math.floor(camX), mY = Math.floor(camY);
+        let dX = Math.abs(1/rDirX), dY = Math.abs(1/rDirY);
+        let sX, sY, sideX, sideY, hit=0, side;
 
-        let deltaX = Math.abs(1 / rayDirX);
-        let deltaY = Math.abs(1 / rayDirY);
-        let stepX, stepY, sideX, sideY, hit=0, side;
-
-        if (rayDirX < 0) { stepX = -1; sideX = (camX - mapX) * deltaX; }
-        else { stepX = 1; sideX = (mapX + 1.0 - camX) * deltaX; }
-        if (rayDirY < 0) { stepY = -1; sideY = (camY - mapY) * deltaY; }
-        else { stepY = 1; sideY = (mapY + 1.0 - camY) * deltaY; }
+        if (rDirX < 0) { sX = -1; sideX = (camX - mX) * dX; }
+        else { sX = 1; sideX = (mX + 1.0 - camX) * dX; }
+        if (rDirY < 0) { sY = -1; sideY = (camY - mY) * dY; }
+        else { sY = 1; sideY = (mY + 1.0 - camY) * dY; }
 
         while(hit == 0) {
-            if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
-            else { sideY += deltaY; mapY += stepY; side = 1; }
-            if (world[mapX + mapY * mapSize] > 0) hit = 1;
+            if (sideX < sideY) { sideX += dX; mX += sX; side = 0; }
+            else { sideY += dY; mY += sY; side = 1; }
+            if (world[mX + mY * mapSize] > 0) hit = 1;
         }
 
-        let perpDist = (side == 0) ? (sideX - deltaX) : (sideY - deltaY);
-        zBuffer[x] = perpDist;
+        let pDist = (side == 0) ? (sideX - dX) : (sideY - dY);
+        zBuffer[x] = pDist;
 
-        let h = Math.floor(canvas.height / perpDist);
-        let start = -h/2 + canvas.height/2;
+        let h = Math.floor(canvas.height / pDist);
+        let drawStart = -h/2 + canvas.height/2 + player.pitch; // Pitch lagt til her
         
-        let color = world[mapX + mapY * mapSize] == 1 ? "#555" : "#772";
-        if (side == 1) ctx.globalAlpha = 0.7; // Enkel skygge på sider
-        ctx.fillStyle = color;
-        ctx.fillRect(x, start, 1, h);
-        ctx.globalAlpha = 1.0;
+        ctx.fillStyle = side == 1 ? "#333" : "#555";
+        ctx.fillRect(x, drawStart, 1, h);
     }
 
-    // Tegn Sprites (Fiender og Våpen)
-    sprites.sort((a,b) => dist(player.x,player.y,b.x,b.y) - dist(player.x,player.y,a.x,a.y));
+    // Sprites
+    sprites.sort((a,b) => dist(player.x, player.y, b.x, b.y) - dist(player.x, player.y, a.x, a.y));
     sprites.forEach(s => {
         if (!s.active) return;
         let sx = s.x - camX, sy = s.y - camY;
         let invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
-        let transX = invDet * (player.dirY * sx - player.dirX * sy);
-        let transY = invDet * (-player.planeY * sx + player.planeX * sy);
-        
-        if (transY > 0.1) {
-            let screenX = Math.floor((canvas.width / 2) * (1 + transX / transY));
-            let sH = Math.abs(Math.floor(canvas.height / transY));
-            let sW = Math.abs(Math.floor(canvas.height / transY));
+        let tx = invDet * (player.dirY * sx - player.dirX * sy);
+        let ty = invDet * (-player.planeY * sx + player.planeX * sy);
 
-            if (zBuffer[screenX] > transY) {
-                ctx.fillStyle = s.type === 'weapon' ? "#0af" : "#f00";
-                ctx.fillRect(screenX - sW/2, canvas.height/2 - sH/4, sW, sH/2);
+        if (ty > 0.1) {
+            let screenX = Math.floor((canvas.width/2) * (1 + tx/ty));
+            let sH = Math.abs(Math.floor(canvas.height / ty));
+            if (zBuffer[screenX] > ty) {
+                ctx.fillStyle = s.type === 0 ? "#3498db" : "#e74c3c";
+                ctx.fillRect(screenX - sH/4, canvas.height/2 - sH/4 + player.pitch, sH/2, sH/2);
             }
         }
     });
 
-    // Tegn Spiller-modell (KUN i 3rd Person)
-    if (player.is3rdPerson) {
-        ctx.fillStyle = "#0f0";
-        ctx.fillRect(canvas.width/2 - 10, canvas.height/2 + 20, 20, 60);
-    } else {
-        // Våpen i 1. person
-        if (player.hasWeapon) {
-            ctx.fillStyle = "#222";
-            ctx.fillRect(canvas.width - 200, canvas.height - 150 + (player.shootTimer*2), 100, 200);
-        }
-    }
+    // Karakter (3rd person) eller Våpen (1st person)
+    if (player.is3rdPerson) drawPlayerModel();
+    else if (player.hasWeapon) drawPistol();
 }
 
+function drawPlayerModel() {
+    let cx = canvas.width/2;
+    let cy = canvas.height/2 + 40 + player.pitch;
+    
+    // Hode
+    ctx.fillStyle = "#ffdbac"; ctx.fillRect(cx-10, cy-70, 20, 20);
+    // Kropp
+    ctx.fillStyle = "#2c3e50"; ctx.fillRect(cx-15, cy-50, 30, 40);
+    // Ben
+    ctx.fillStyle = "#34495e"; ctx.fillRect(cx-15, cy-10, 12, 30);
+    ctx.fillRect(cx+3, cy-10, 12, 30);
+    // Armer
+    ctx.fillStyle = "#2c3e50"; ctx.fillRect(cx-25, cy-50, 10, 30);
+    ctx.fillRect(cx+15, cy-50, 10, 30);
+}
 
+function drawPistol() {
+    ctx.save();
+    ctx.translate(canvas.width - 220, canvas.height - 180 + player.pitch);
+    
+    // Gun Body
+    ctx.fillStyle = "#222"; ctx.fillRect(0, 40, 60, 150); // Grep
+    ctx.fillStyle = "#333"; ctx.fillRect(-120, 0, 180, 50); // Løp
+    
+    // Detaljer
+    ctx.fillStyle = "#111"; ctx.fillRect(-120, 10, 180, 5); // Linje på løp
+    ctx.fillStyle = "#555"; ctx.fillRect(30, 10, 20, 10); // Sikte
+    
+    ctx.restore();
+}
 
 function loop() {
     update();
