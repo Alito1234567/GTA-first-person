@@ -3,44 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arena Survivor: Dead End</title>
+    <title>Billig Bror: Arena Pro</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
         
-        #ui {
-            position: absolute; top: 20px; left: 20px; color: #fff; 
-            background: rgba(0,0,0,0.8); padding: 15px; border-left: 5px solid #e74c3c;
-            pointer-events: none;
+        #hud {
+            position: absolute; top: 20px; left: 20px; color: white;
+            background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;
+            border-left: 5px solid #3498db; pointer-events: none;
         }
 
         #death-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(139, 0, 0, 0.8); color: white;
+            background: rgba(139, 0, 0, 0.9); color: white;
             display: none; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 2000;
+            z-index: 999;
         }
 
-        #death-screen h1 { font-size: 80px; margin: 0; text-shadow: 5px 5px #000; }
-        #death-screen button { 
-            padding: 15px 30px; font-size: 20px; background: white; border: none; 
-            cursor: pointer; margin-top: 20px; font-weight: bold;
-        }
+        .stat-bar { width: 200px; height: 15px; background: #333; margin-top: 5px; border-radius: 5px; overflow: hidden; }
+        #hp-fill { height: 100%; background: #e74c3c; width: 100%; transition: width 0.3s; }
     </style>
 </head>
 <body>
 
-    <div id="ui">
-        <div style="font-size: 24px; font-weight: 900; color: #e74c3c;">HP: <span id="hp">100</span></div>
-        <div id="weapon-status" style="color: #3498db;">FINN VÅPEN (Blå bokser)</div>
-        <div style="font-size: 12px; margin-top: 5px; color: #aaa;">
-            PILER: Sikte opp/ned | W/S/A/D: Bevegelse<br>I: Skyte | T: Plukke opp | B: 3rd person
-        </div>
+    <div id="hud">
+        <div style="font-weight: bold; font-size: 18px; margin-bottom: 5px;">SURVIVOR STATUS</div>
+        HP: <span id="hp-text">100</span>
+        <div class="stat-bar"><div id="hp-fill"></div></div>
+        <div id="weapon-status" style="margin-top: 10px; color: #aaa;">LOKALISER VÅPEN (BLÅ BOKS)</div>
     </div>
 
     <div id="death-screen">
-        <h1>DU DØDE</h1>
-        <button onclick="location.reload()">PRØV IGJEN</button>
+        <h1 style="font-size: 80px; margin: 0;">TERMINATED</h1>
+        <button onclick="location.reload()" style="padding: 15px 40px; font-size: 20px; cursor: pointer; border: none; background: white; font-weight: bold;">TRY AGAIN</button>
     </div>
 
     <canvas id="game"></canvas>
@@ -48,104 +44,47 @@
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-canvas.width = 640; canvas.height = 360;
+canvas.width = 640; 
+canvas.height = 360;
 
+// MAP: 0=luft, 1=murstein, 2=stål, 3=speil/glass
 const mapSize = 24;
-const world = [
+const map = [
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,2,2,0,0,3,3,0,0,0,0,1,0,0,0,0,0,0,0,2,2,0,1,
-    1,0,2,0,0,0,0,0,0,0,0,0,1,0,0,0,3,3,0,0,0,2,0,1,
-    1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,3,3,0,0,0,0,0,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,1,1,1,0,0,0,0,2,2,2,2,2,2,2,2,0,0,0,0,1,1,1,1,
-    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
-    1,0,0,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,0,0,1,
-    1,0,0,3,3,0,0,0,0,1,1,0,0,1,1,0,0,0,0,3,3,0,0,1,
+    1,0,3,3,0,0,2,2,0,0,0,0,0,0,2,2,0,0,0,0,3,3,0,1,
+    1,0,3,3,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,3,3,0,1,
     1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+    1,0,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,0,1,
+    1,0,0,0,0,3,3,0,0,0,0,1,1,0,0,0,0,3,3,0,0,0,0,1,
+    1,1,1,0,0,3,3,0,0,0,0,1,1,0,0,0,0,3,3,0,0,1,1,1,
+    1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+    1,0,3,3,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,3,3,0,1,
     1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
     1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 ];
 
 let player = {
     x: 12, y: 10, dirX: -1, dirY: 0, planeX: 0, planeY: 0.66,
-    hp: 100, hasWeapon: false, is3rdPerson: false, 
-    pitch: 0, // Vertikal sikt
-    dead: false
+    hp: 100, hasWeapon: false, is3rdPerson: false,
+    pitch: 0, recoil: 0, flash: 0, dead: false
 };
 
-// Sprites: Våpen (type 0) og Fiender (type 1)
 let sprites = [
-    {x: 14, y: 10, type: 0, active: true},
-    {x: 5, y: 3, type: 0, active: true},
-    {x: 19, y: 5, type: 0, active: true},
-    {x: 2, y: 10, type: 0, active: true},
-    {x: 10, y: 5, type: 1, active: true, hp: 3},
-    {x: 15, y: 2, type: 1, active: true, hp: 3},
-    {x: 4, y: 4, type: 1, active: true, hp: 3}
+    {x: 12, y: 5, type: 'gun', active: true},
+    {x: 5, y: 5, type: 'gun', active: true},
+    {x: 19, y: 10, type: 'gun', active: true},
+    {x: 5, y: 2, type: 'enemy', active: true, hp: 3},
+    {x: 18, y: 2, type: 'enemy', active: true, hp: 3}
 ];
 
 const keys = {};
 window.onkeydown = e => keys[e.code] = true;
 window.onkeyup = e => keys[e.code] = false;
 
-function update() {
-    if (player.dead) return;
-
-    const moveSpeed = 0.07;
-    const rotSpeed = 0.04;
-
-    if (keys['KeyW']) move(moveSpeed);
-    if (keys['KeyS']) move(-moveSpeed);
-    if (keys['KeyD']) rotate(-rotSpeed);
-    if (keys['KeyA']) rotate(rotSpeed);
-    if (keys['KeyB']) { player.is3rdPerson = !player.is3rdPerson; keys['KeyB'] = false; }
-
-    // Sikte opp/ned (Pitch)
-    if (keys['ArrowUp']) player.pitch = Math.min(player.pitch + 5, 100);
-    if (keys['ArrowDown']) player.pitch = Math.max(player.pitch - 5, -100);
-
-    // Plukk opp (T)
-    if (keys['KeyT']) {
-        sprites.forEach(s => {
-            if (s.type === 0 && s.active && dist(player.x, player.y, s.x, s.y) < 1) {
-                s.active = false;
-                player.hasWeapon = true;
-                document.getElementById('weapon-status').innerText = "VÅPEN KLAR: PISTOL";
-                document.getElementById('weapon-status').style.color = "#2ecc71";
-            }
-        });
-    }
-
-    // Skyte (I)
-    if (keys['KeyI'] && player.hasWeapon) {
-        shoot();
-    }
-
-    // Fiende AI og HP sjekk
-    sprites.forEach(s => {
-        if (s.type === 1 && s.active) {
-            let d = dist(player.x, player.y, s.x, s.y);
-            if (d < 8) {
-                s.x += (player.x - s.x) * 0.005;
-                s.y += (player.y - s.y) * 0.005;
-            }
-            if (d < 0.5) player.hp -= 0.5;
-        }
-    });
-
-    if (player.hp <= 0) {
-        player.hp = 0;
-        player.dead = true;
-        document.getElementById('death-screen').style.display = 'flex';
-    }
-
-    document.getElementById('hp').innerText = Math.ceil(player.hp);
-}
-
 function move(s) {
-    if (world[Math.floor(player.x + player.dirX * s) + Math.floor(player.y) * mapSize] === 0) player.x += player.dirX * s;
-    if (world[Math.floor(player.x) + Math.floor(player.y + player.dirY * s) * mapSize] === 0) player.y += player.dirY * s;
+    if (map[Math.floor(player.x + player.dirX * s) + Math.floor(player.y) * mapSize] === 0) player.x += player.dirX * s;
+    if (map[Math.floor(player.x) + Math.floor(player.y + player.dirY * s) * mapSize] === 0) player.y += player.dirY * s;
 }
 
 function rotate(s) {
@@ -157,25 +96,80 @@ function rotate(s) {
     player.planeY = oldPX * Math.sin(s) + player.planeY * Math.cos(s);
 }
 
-function dist(x1, y1, x2, y2) { return Math.sqrt((x2-x1)**2 + (y2-y1)**2); }
+function update() {
+    if (player.dead) return;
 
-function shoot() {
-    sprites.forEach(s => {
-        if (s.type === 1 && s.active) {
-            let dx = s.x - player.x, dy = s.y - player.y;
-            let angle = Math.atan2(dy, dx);
-            let pAngle = Math.atan2(player.dirY, player.dirX);
-            if (Math.abs(angle - pAngle) < 0.2 && dist(player.x, player.y, s.x, s.y) < 10) {
-                s.hp--; if (s.hp <= 0) s.active = false;
+    if (keys['KeyW']) move(0.08);
+    if (keys['KeyS']) move(-0.08);
+    if (keys['KeyD']) rotate(-0.05);
+    if (keys['KeyA']) rotate(0.05);
+    if (keys['ArrowUp']) player.pitch = Math.min(player.pitch + 10, 200);
+    if (keys['ArrowDown']) player.pitch = Math.max(player.pitch - 10, -200);
+    if (keys['KeyB']) { player.is3rdPerson = !player.is3rdPerson; keys['KeyB'] = false; }
+
+    // Plukk opp våpen (T)
+    if (keys['KeyT']) {
+        sprites.forEach(s => {
+            if (s.type === 'gun' && s.active && Math.hypot(s.x - player.x, s.y - player.y) < 1) {
+                s.active = false;
+                player.hasWeapon = true;
+                document.getElementById('weapon-status').innerText = "VÅPEN: PISTOL MOD 1";
+                document.getElementById('weapon-status').style.color = "#3498db";
             }
+        });
+    }
+
+    // Skyte (I)
+    if (keys['KeyI'] && player.hasWeapon && player.recoil === 0) {
+        player.recoil = 20;
+        player.flash = 5;
+        // Hit detection
+        sprites.forEach(s => {
+            if (s.type === 'enemy' && s.active) {
+                let angle = Math.atan2(s.y - player.y, s.x - player.x);
+                let pAngle = Math.atan2(player.dirY, player.dirX);
+                if (Math.abs(angle - pAngle) < 0.1 && Math.hypot(s.x - player.x, s.y - player.y) < 15) {
+                    s.hp--; if (s.hp <= 0) s.active = false;
+                }
+            }
+        });
+    }
+
+    if (player.recoil > 0) player.recoil -= 2;
+    if (player.flash > 0) player.flash--;
+
+    // Fiende AI
+    sprites.forEach(s => {
+        if (s.type === 'enemy' && s.active) {
+            let d = Math.hypot(s.x - player.x, s.y - player.y);
+            if (d < 10) {
+                s.x += (player.x - s.x) * 0.01;
+                s.y += (player.y - s.y) * 0.01;
+            }
+            if (d < 0.5) player.hp -= 0.5;
         }
     });
+
+    if (player.hp <= 0) {
+        player.dead = true;
+        document.getElementById('death-screen').style.display = 'flex';
+    }
+
+    document.getElementById('hp-text').innerText = Math.ceil(player.hp);
+    document.getElementById('hp-fill').style.width = player.hp + "%";
 }
 
 function draw() {
-    // Bakgrunn
-    ctx.fillStyle = "#1a1a1a"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Bakgrunnsgradient (Himmel og gulv)
+    let sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    sky.addColorStop(0, "#00050a");
+    sky.addColorStop(0.5, "#1a1a2e");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
+    ctx.fillStyle = "#111"; // Gulv
+    ctx.fillRect(0, canvas.height/2 + player.pitch, canvas.width, canvas.height);
+
     let camX = player.x, camY = player.y;
     if (player.is3rdPerson) {
         camX -= player.dirX * 1.5; camY -= player.dirY * 1.5;
@@ -183,89 +177,91 @@ function draw() {
 
     const zBuffer = [];
 
-    // Vegger
+    // RAYCASTING VEGGER
     for (let x = 0; x < canvas.width; x++) {
         let cameraX = 2 * x / canvas.width - 1;
-        let rDirX = player.dirX + player.planeX * cameraX;
-        let rDirY = player.dirY + player.planeY * cameraX;
-
+        let rX = player.dirX + player.planeX * cameraX;
+        let rY = player.dirY + player.planeY * cameraX;
         let mX = Math.floor(camX), mY = Math.floor(camY);
-        let dX = Math.abs(1/rDirX), dY = Math.abs(1/rDirY);
+        let dX = Math.abs(1/rX), dY = Math.abs(1/rY);
         let sX, sY, sideX, sideY, hit=0, side;
 
-        if (rDirX < 0) { sX = -1; sideX = (camX - mX) * dX; }
-        else { sX = 1; sideX = (mX + 1.0 - camX) * dX; }
-        if (rDirY < 0) { sY = -1; sideY = (camY - mY) * dY; }
-        else { sY = 1; sideY = (mY + 1.0 - camY) * dY; }
+        if (rX < 0) { sX = -1; sideX = (camX - mX) * dX; } else { sX = 1; sideX = (mX + 1.0 - camX) * dX; }
+        if (rY < 0) { sY = -1; sideY = (camY - mY) * dY; } else { sY = 1; sideY = (mY + 1.0 - camY) * dY; }
 
-        while(hit == 0) {
-            if (sideX < sideY) { sideX += dX; mX += sX; side = 0; }
-            else { sideY += dY; mY += sY; side = 1; }
-            if (world[mX + mY * mapSize] > 0) hit = 1;
+        while(hit === 0) {
+            if (sideX < sideY) { sideX += dX; mX += sX; side = 0; } else { sideY += dY; mY += sY; side = 1; }
+            if (map[mX + mY * mapSize] > 0) hit = 1;
         }
 
-        let pDist = (side == 0) ? (sideX - dX) : (sideY - dY);
+        let pDist = (side === 0) ? (sideX - dX) : (sideY - dY);
         zBuffer[x] = pDist;
-
         let h = Math.floor(canvas.height / pDist);
-        let drawStart = -h/2 + canvas.height/2 + player.pitch; // Pitch lagt til her
-        
-        ctx.fillStyle = side == 1 ? "#333" : "#555";
-        ctx.fillRect(x, drawStart, 1, h);
+        let start = -h/2 + canvas.height/2 + player.pitch;
+
+        // Farge og skygge basert på vegg og avstand
+        let wall = map[mX + mY * mapSize];
+        let baseColor;
+        if (wall === 3) baseColor = side === 1 ? [150, 200, 255] : [200, 230, 255]; // Speil
+        else if (wall === 2) baseColor = side === 1 ? [60, 60, 70] : [80, 80, 90]; // Stål
+        else baseColor = side === 1 ? [80, 40, 40] : [100, 50, 50]; // Mur
+
+        let shadow = Math.max(0, 1 - pDist/15);
+        ctx.fillStyle = `rgb(${baseColor[0]*shadow},${baseColor[1]*shadow},${baseColor[2]*shadow})`;
+        ctx.fillRect(x, start, 1, h);
     }
 
-    // Sprites
-    sprites.sort((a,b) => dist(player.x, player.y, b.x, b.y) - dist(player.x, player.y, a.x, a.y));
+    // SPRITES
+    sprites.sort((a,b) => Math.hypot(b.x-player.x, b.y-player.y) - Math.hypot(a.x-player.x, a.y-player.y));
     sprites.forEach(s => {
         if (!s.active) return;
         let sx = s.x - camX, sy = s.y - camY;
-        let invDet = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
-        let tx = invDet * (player.dirY * sx - player.dirX * sy);
-        let ty = invDet * (-player.planeY * sx + player.planeX * sy);
-
+        let inv = 1.0 / (player.planeX * player.dirY - player.dirX * player.planeY);
+        let tx = inv * (player.dirY * sx - player.dirX * sy);
+        let ty = inv * (-player.planeY * sx + player.planeX * sy);
         if (ty > 0.1) {
-            let screenX = Math.floor((canvas.width/2) * (1 + tx/ty));
+            let sX = Math.floor((canvas.width/2) * (1 + tx/ty));
             let sH = Math.abs(Math.floor(canvas.height / ty));
-            if (zBuffer[screenX] > ty) {
-                ctx.fillStyle = s.type === 0 ? "#3498db" : "#e74c3c";
-                ctx.fillRect(screenX - sH/4, canvas.height/2 - sH/4 + player.pitch, sH/2, sH/2);
+            if (zBuffer[sX] > ty) {
+                ctx.fillStyle = s.type === 'gun' ? "#3498db" : "#e74c3c";
+                ctx.fillRect(sX - sH/4, canvas.height/2 - sH/4 + player.pitch, sH/2, sH/2);
             }
         }
     });
 
-    // Karakter (3rd person) eller Våpen (1st person)
-    if (player.is3rdPerson) drawPlayerModel();
-    else if (player.hasWeapon) drawPistol();
+    if (player.is3rdPerson) drawModernPlayer();
+    else if (player.hasWeapon) drawModernPistol();
 }
 
-function drawPlayerModel() {
-    let cx = canvas.width/2;
-    let cy = canvas.height/2 + 40 + player.pitch;
-    
-    // Hode
-    ctx.fillStyle = "#ffdbac"; ctx.fillRect(cx-10, cy-70, 20, 20);
-    // Kropp
-    ctx.fillStyle = "#2c3e50"; ctx.fillRect(cx-15, cy-50, 30, 40);
-    // Ben
-    ctx.fillStyle = "#34495e"; ctx.fillRect(cx-15, cy-10, 12, 30);
-    ctx.fillRect(cx+3, cy-10, 12, 30);
-    // Armer
-    ctx.fillStyle = "#2c3e50"; ctx.fillRect(cx-25, cy-50, 10, 30);
-    ctx.fillRect(cx+15, cy-50, 10, 30);
+function drawModernPlayer() {
+    let x = canvas.width/2, y = canvas.height/2 + 60 + player.pitch;
+    ctx.fillStyle = "#ffdbac"; ctx.fillRect(x-10, y-80, 20, 20); // Hode
+    ctx.fillStyle = "#2980b9"; ctx.fillRect(x-15, y-60, 30, 45); // Jakke
+    ctx.fillStyle = "#2c3e50"; ctx.fillRect(x-15, y-15, 12, 35); // Ben
+    ctx.fillRect(x+3, y-15, 12, 35);
 }
 
-function drawPistol() {
+function drawModernPistol() {
+    let rec = player.recoil;
     ctx.save();
-    ctx.translate(canvas.width - 220, canvas.height - 180 + player.pitch);
+    ctx.translate(canvas.width - 200, canvas.height - 150 + player.pitch - rec);
     
-    // Gun Body
-    ctx.fillStyle = "#222"; ctx.fillRect(0, 40, 60, 150); // Grep
-    ctx.fillStyle = "#333"; ctx.fillRect(-120, 0, 180, 50); // Løp
+    // Pistolen (Svart stål)
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, 50, 140); // Grep
+    ctx.fillRect(-120, -10, 180, 55); // Løp
     
-    // Detaljer
-    ctx.fillStyle = "#111"; ctx.fillRect(-120, 10, 180, 5); // Linje på løp
-    ctx.fillStyle = "#555"; ctx.fillRect(30, 10, 20, 10); // Sikte
+    // Lys-effekter
+    ctx.fillStyle = "#333";
+    ctx.fillRect(-120, -10, 180, 5); // Topp-kant
     
+    // Muzzle Flash
+    if (player.flash > 0) {
+        ctx.fillStyle = "rgba(255, 200, 0, "+(player.flash/5)+")";
+        ctx.beginPath();
+        ctx.arc(-140, 15, 40, 0, Math.PI*2);
+        ctx.fill();
+    }
     ctx.restore();
 }
 
